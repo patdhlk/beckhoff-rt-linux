@@ -28,7 +28,7 @@ jobs:
       - name: Run hadolint
         run: |
           if [ -f docker/Dockerfile ]; then
-            docker run --rm -i hadolint/hadolint < docker/Dockerfile
+            docker run --rm -i hadolint/hadolint:v2.12.0 < docker/Dockerfile
           else
             echo "No Dockerfile yet — skipping."
           fi
