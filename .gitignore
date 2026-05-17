@@ -1,0 +1,23 @@
+# Beckhoff installer artifacts (never redistribute)
+*.img
+*.zip
+*.iso
+Beckhoff-RT-Linux_installer-*/
+Beckhoff_RT_Linux_*.pdf
+
+# Credentials & secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# Superpowers internals (local-only)
+docs/superpowers/
+
+# OS / editor / build noise
+.DS_Store
+*.swp
+*~
+build/
+dist/
+.docker-cache/
