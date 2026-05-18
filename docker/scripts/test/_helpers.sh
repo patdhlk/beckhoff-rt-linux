@@ -39,14 +39,21 @@ assert_exit_code() {
 }
 
 run_tests() {
-  local fn
+  local fn rc before_failures
   for fn in $(declare -F | awk '$3 ~ /^test_/ {print $3}'); do
     TEST_NAME="$fn"
     TESTS_RUN=$((TESTS_RUN + 1))
+    before_failures=$TESTS_FAILED
+    set +e
     "$fn"
+    rc=$?
+    set -e
+    if [ "$rc" -ne 0 ] && [ "$TESTS_FAILED" -eq "$before_failures" ]; then
+      fail "test exited with code $rc (no assertion failed; unhandled error)"
+    fi
   done
   echo
-  echo "Tests run: $TESTS_RUN  Failed: $TESTS_FAILED"
+  echo "Tests run: $TESTS_RUN  Failed: $TESTS_FAILED" >&2
   if [ "$TESTS_FAILED" -gt 0 ]; then
     printf '  - %s\n' "${FAILED_NAMES[@]}" >&2
     exit 1
