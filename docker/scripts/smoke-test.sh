@@ -67,7 +67,15 @@ check_no_credentials() {
 }
 run_check "no apt credentials baked into image" check_no_credentials
 
-# 7. OCI license label set — the distribution restriction must travel with it.
+# 7. The RT warning actually fires under stock docker capabilities. The unit
+#    tests use fixtures; this proves the real container path, where an earlier
+#    heuristic ("is CapBnd zero") was silent because CapBnd is never zero.
+check_rt_warning() {
+  docker run --rm --platform "$PLATFORM" "$TAG" true 2>&1 | grep -q 'CAP_SYS_NICE'
+}
+run_check "RT warning fires under stock docker caps" check_rt_warning
+
+# 8. OCI license label set — the distribution restriction must travel with it.
 check_license_label() {
   [ "$(docker inspect "$TAG" --format '{{ index .Config.Labels "org.opencontainers.image.licenses" }}')" \
     = 'proprietary-Beckhoff' ]
