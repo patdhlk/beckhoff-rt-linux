@@ -22,10 +22,40 @@ The Beckhoff RT Linux installer Readme states:
 > For a commercial usage of the product a separate license as well as a license batch is necessary.
 > The distribution of the product installed on a CPU without a license batch is prohibited."
 
-This image is built from Beckhoff packages installed via your Beckhoff
-customer-account credentials. Redistribution of the resulting image to third
-parties without explicit Beckhoff permission is **your responsibility**, not
-this repo's.
+### What this repo contains, and what it doesn't
+
+**This repository ships build scripts only.** No Beckhoff software is included
+or redistributed here. The packages are pulled at build time from
+`deb.beckhoff.com` using *your* customer-account credentials, and they land
+only in the image on your machine.
+
+That distinction matters for what you may do with each half:
+
+| Artifact | Terms |
+|----------|-------|
+| Scripts, Dockerfile, workflows in this repo | MIT |
+| The image you build from them | Contains proprietary Beckhoff software — the notice above governs it |
+
+### Recommended posture
+
+This is operational guidance, not legal advice. If in doubt, ask Beckhoff.
+
+1. **Keep built images private.** Never push to a public registry. If you use
+   the `push_to_ghcr` workflow input, confirm the resulting GHCR package is
+   marked **private** — a public one distributes Beckhoff software to anyone.
+2. **Let each user build their own image** rather than sharing yours. The
+   build is reproducible and takes minutes; every colleague already needs a
+   Beckhoff account to be entitled to the software anyway.
+3. **Treat it as testing-only** unless you hold a commercial license and
+   license batch. That is Beckhoff's wording, and it covers CI and development
+   use of an unlicensed runtime.
+4. **Do not bake credentials into the image.** The build already prevents this
+   — credentials are mounted as BuildKit secrets and never written to a layer,
+   and smoke check 6 fails the build if any apt auth survives. Keep it that way
+   if you modify the Dockerfile: a leaked image would expose your Beckhoff
+   account, not just the software.
+5. **Redistribution to third parties needs explicit Beckhoff permission.**
+   That decision is **yours as the builder**, not this repo's.
 
 ## Prerequisites
 
@@ -139,6 +169,10 @@ docker login "$BHF_PUSH_REGISTRY"
 ./docker/scripts/build.sh --push
 ```
 
+Verify the package is **private** afterwards. On GHCR a newly created package
+is private by default, but a repo-linked package can inherit visibility — check
+it rather than assuming. See [Licensing](#licensing) before pushing anywhere.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -154,4 +188,5 @@ docker login "$BHF_PUSH_REGISTRY"
 ## License
 
 Scripts, Dockerfile, and workflows in this repo: MIT.
-Beckhoff packages inside the built image: see **Licensing** above.
+Beckhoff packages inside the built image: see [Licensing](#licensing) above —
+they are proprietary and are never redistributed by this repository.
