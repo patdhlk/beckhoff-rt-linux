@@ -1,0 +1,79 @@
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_to_ghcr:
+        type: boolean
+        default: false
+        description: "Push multi-arch image to ghcr.io/<owner>/beckhoff-rt-linux (private package)"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # arm64 is only needed for the multi-arch push; the amd64 build and
+      # smoke run natively on the runner.
+      - name: Set up QEMU
+        if: ${{ inputs.push_to_ghcr }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: ${{ inputs.push_to_ghcr }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Values are written verbatim; nothing sources this file (see
+      # docker/scripts/env-lib.sh), so metacharacters in the password are safe.
+      - name: Materialise .env from secrets
+        env:
+          BECKHOFF_EMAIL: ${{ secrets.BECKHOFF_EMAIL }}
+          BECKHOFF_PASSWORD: ${{ secrets.BECKHOFF_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${BECKHOFF_EMAIL:?secret BECKHOFF_EMAIL not configured in repo settings}"
+          : "${BECKHOFF_PASSWORD:?secret BECKHOFF_PASSWORD not configured in repo settings}"
+          { printf 'BECKHOFF_EMAIL=%s\n' "$BECKHOFF_EMAIL"; \
+            printf 'BECKHOFF_PASSWORD=%s\n' "$BECKHOFF_PASSWORD"; } > .env
+
+      - name: Build + smoke (amd64)
+        env:
+          BHF_PLATFORMS: linux/amd64
+        run: bash docker/scripts/build.sh --smoke
+
+      - name: Save image as artifact
+        run: |
+          set -euo pipefail
+          VCS_REF=$(git rev-parse --short HEAD)
+          docker save "beckhoff-rt-linux:${VCS_REF}-amd64" | zstd -o image.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beckhoff-rt-linux-image
+          path: image.tar.zst
+          retention-days: 30
+
+      # Rebuilds both platforms as one manifest list. arm64 goes through QEMU
+      # here and is markedly slower than the native amd64 pass above.
+      - name: Push multi-arch to GHCR
+        if: ${{ inputs.push_to_ghcr }}
+        env:
+          BHF_PUSH_REGISTRY: ghcr.io/${{ github.repository_owner }}
+          BHF_PLATFORMS: linux/amd64,linux/arm64
+        run: bash docker/scripts/build.sh --push
+
+      - name: Wipe credentials
+        if: always()
+        run: rm -f .env
