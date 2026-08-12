@@ -1,0 +1,7 @@
+adstool
+bhfinfo
+libadscomm
+libadscomm-dev
+tc31-orderno
+tc31-xar-um
+tcsysconf
