@@ -7,9 +7,9 @@ cross-compiling against the Beckhoff libraries, and running Beckhoff CLI tools.
 **Not real-time.** Containers share the host kernel, so real-time scheduling
 needs two things the default `docker run` does not give you:
 
-- `CAP_SYS_NICE` — Docker's default capability set omits it. Add
+- `CAP_SYS_NICE`: Docker's default capability set omits it. Add
   `--cap-add SYS_NICE` (or `--privileged`).
-- a `PREEMPT_RT` host kernel — nothing inside the container substitutes for it.
+- a `PREEMPT_RT` host kernel: nothing inside the container substitutes for it.
 
 The entrypoint checks both on startup and names whichever is missing. Silence
 it with `BHF_QUIET=1`.
@@ -34,7 +34,7 @@ That distinction matters for what you may do with each half:
 | Artifact | Terms |
 |----------|-------|
 | Scripts, Dockerfile, workflows in this repo | MIT |
-| The image you build from them | Contains proprietary Beckhoff software — the notice above governs it |
+| The image you build from them | Contains proprietary Beckhoff software; the notice above governs it |
 
 ### Recommended posture
 
@@ -42,15 +42,15 @@ This is operational guidance, not legal advice. If in doubt, ask Beckhoff.
 
 1. **Keep built images private.** Never push to a public registry. If you use
    the `push_to_ghcr` workflow input, confirm the resulting GHCR package is
-   marked **private** — a public one distributes Beckhoff software to anyone.
+   marked **private**: a public one distributes Beckhoff software to anyone.
 2. **Let each user build their own image** rather than sharing yours. The
    build is reproducible and takes minutes; every colleague already needs a
    Beckhoff account to be entitled to the software anyway.
 3. **Treat it as testing-only** unless you hold a commercial license and
    license batch. That is Beckhoff's wording, and it covers CI and development
    use of an unlicensed runtime.
-4. **Do not bake credentials into the image.** The build already prevents this
-   — credentials are mounted as BuildKit secrets and never written to a layer,
+4. **Do not bake credentials into the image.** The build already prevents this:
+  credentials are mounted as BuildKit secrets and never written to a layer,
    and smoke check 6 fails the build if any apt auth survives. Keep it that way
    if you modify the Dockerfile: a leaked image would expose your Beckhoff
    account, not just the software.
@@ -62,9 +62,9 @@ This is operational guidance, not legal advice. If in doubt, ask Beckhoff.
 - Docker with BuildKit (`docker buildx version` should succeed)
 - A Beckhoff customer account with access to `deb.beckhoff.com`
 - Linux x86_64 host, or Apple Silicon (both `linux/amd64` and `linux/arm64` are
-  buildable — see [Architectures](#architectures))
+  buildable, see [Architectures](#architectures))
 - **Running the XAR runtime needs a real x86_64 engine.** Apple Silicon cannot
-  run it under emulation — see [Running from a Mac (Apple Silicon)](#running-from-a-mac-apple-silicon).
+  run it under emulation, see [Running from a Mac (Apple Silicon)](#running-from-a-mac-apple-silicon).
 
 ## Quick start
 
@@ -76,7 +76,7 @@ $EDITOR .env                          # fill in BECKHOFF_EMAIL and BECKHOFF_PASS
 docker run --rm -it beckhoff-rt-linux:latest    # shell into /work
 ```
 
-If your password contains shell metacharacters — `(`, `)`, `$`, backticks —
+If your password contains shell metacharacters, `(`, `)`, `$`, backticks,
 that is fine. Nothing sources `.env`; it is parsed (see
 `docker/scripts/env-lib.sh`). Quoting the value is optional.
 
@@ -125,7 +125,7 @@ docker run --rm beckhoff-rt-linux:latest adstool --help
 # Inspect the rootfs
 docker run --rm -it beckhoff-rt-linux:latest
 
-# Run the TwinCAT runtime so an XAE can connect — see the next section
+# Run the TwinCAT runtime so an XAE can connect, see the next section
 ./docker/scripts/run-xar.sh
 ```
 
@@ -155,8 +155,8 @@ Configuration, all optional:
 | `BHF_IMAGE` | `beckhoff-rt-linux:latest` | Image to run |
 | `BHF_CONTAINER` | `beckhoff-xar` | Container name |
 | `BHF_VOLUME` | `beckhoff-xar-data` | Volume for `/etc/TwinCAT` |
-| `BHF_NETID` | `192.168.77.10.1.1` | AmsNetId — without an explicit one the service derives `0.0.0.0.1.1` off Beckhoff hardware |
-| `BHF_ADS_USER` / `BHF_ADS_PASSWORD` | `Administrator` / `1` | Route-add credentials. Beckhoff's conventional defaults — change them for anything reachable by others |
+| `BHF_NETID` | `192.168.77.10.1.1` | AmsNetId. Without an explicit one the service derives `0.0.0.0.1.1` off Beckhoff hardware |
+| `BHF_ADS_USER` / `BHF_ADS_PASSWORD` | `Administrator` / `1` | Route-add credentials. Beckhoff's conventional defaults; change them for anything reachable by others |
 | `BHF_PRIVILEGED` | `0` | `1` runs `--privileged` instead of `--cap-add SYS_NICE --ulimit memlock=-1` |
 | `BHF_ENGINE_HOST` | derived | Hostname/IP printed in the XAE route hint. Auto-derived from the active Docker context / `DOCKER_HOST`; set it when the routable address differs (tunnels, NAT) |
 
@@ -165,8 +165,8 @@ cross the Docker NAT), Secure ADS, and the credentials above.
 
 `run-xar.sh` verifies the runtime actually registered an ADS server before it
 reports success: it probes the local system service (`adstool 127.0.0.1
-state`). If no server registers — the normal outcome on an unsupported or
-emulated host — it prints a diagnosis and exits non-zero, leaving the container
+state`). If no server registers, the normal outcome on an unsupported or
+emulated host, it prints a diagnosis and exits non-zero, leaving the container
 up for inspection. See [Where the runtime actually starts](#where-the-runtime-actually-starts).
 
 ### Where the runtime actually starts
@@ -174,7 +174,7 @@ up for inspection. See [Where the runtime actually starts](#where-the-runtime-ac
 The XAR binds to hardware it recognizes; the container transport coming up
 does not mean the runtime did:
 
-- **amd64** — real Intel/AMD silicon. It needs a real PC underneath (SMBIOS/DMI,
+- **amd64**: real Intel/AMD silicon. It needs a real PC underneath (SMBIOS/DMI,
   unrestricted `/dev/mem`, a CPUID it recognises). Under emulation it fails for
   one of two reasons: a TSO-less x86 layer (QEMU-user, the Windows-on-ARM x64
   emulator) breaks the memory ordering the ADS router relies on; Apple's Rosetta
@@ -182,7 +182,7 @@ does not mean the runtime did:
   the system service aborts in its hardware layer. Either way no ADS server
   registers. See [Running from a Mac](#running-from-a-mac-apple-silicon) for the
   measured detail.
-- **arm64** — Beckhoff CX8290/CX9240 only. The binaries match the device-tree
+- **arm64**: Beckhoff CX8290/CX9240 only. The binaries match the device-tree
   `compatible` strings `cx8200`/`cx9240`; generic ARM boards (Raspberry Pi,
   Revolution Pi) will not work, RT kernel or not.
 
@@ -198,16 +198,16 @@ the working topology.
 ## Running from a Mac (Apple Silicon)
 
 You cannot run the XAR runtime in **Docker** on an Apple Silicon Mac, on either
-image architecture — and, contrary to the usual explanation, the "x86 memory
+image architecture, and, contrary to the usual explanation, the "x86 memory
 model" is not what stops it. Each path was tested on an M-series Mac:
 
 | Path | What happens | Root cause (verified) |
 |------|--------------|-----------------------|
-| Docker **amd64**, Rosetta | `TcSysConf` completes (once `/sys/kernel/iommu_groups` exists), but the system service aborts in its HAL — `Unknown Intel CPU model`, `Mapping memory failed … /dev/mem … Operation not permitted`; `state` → ADS error 6. | Rosetta emulates x86 memory ordering (TSO) correctly, so the router is not the blocker. Docker's LinuxKit VM is not a real PC: no SMBIOS/DMI, `/dev/mem` restricted (`STRICT_DEVMEM`), a CPUID TwinCAT does not recognise. |
+| Docker **amd64**, Rosetta | `TcSysConf` completes (once `/sys/kernel/iommu_groups` exists), but the system service aborts in its HAL: `Unknown Intel CPU model`, `Mapping memory failed … /dev/mem … Operation not permitted`; `state` → ADS error 6. | Rosetta emulates x86 memory ordering (TSO) correctly, so the router is not the blocker. Docker's LinuxKit VM is not a real PC: no SMBIOS/DMI, `/dev/mem` restricted (`STRICT_DEVMEM`), a CPUID TwinCAT does not recognise. |
 | Docker **amd64**, QEMU-user, or **Windows-on-ARM** x64 emulator | ADS router never starts. | No hardware TSO, so x86 memory ordering is not preserved. This is the case Beckhoff support describes. |
-| Docker **arm64**, native (no emulation) | `TcSystemService` runs, discovery answers, `state` → ADS error 6. Spoofing the identity gate (`/sys/firmware/devicetree/base/compatible` = `beckhoff,cx9240`) clears the check — then it **segfaults**. | The arm64 build is gated to Beckhoff CX (`beckhoff,cx8200`/`cx9240`), then drives their real peripherals (CCAT PCIe FPGA, board EEPROMs, fixed MMIO via `/dev/mem`) that do not exist on a Mac. |
+| Docker **arm64**, native (no emulation) | `TcSystemService` runs, discovery answers, `state` → ADS error 6. Spoofing the identity gate (`/sys/firmware/devicetree/base/compatible` = `beckhoff,cx9240`) clears the check; then it **segfaults**. | The arm64 build is gated to Beckhoff CX (`beckhoff,cx8200`/`cx9240`), then drives their real peripherals (CCAT PCIe FPGA, board EEPROMs, fixed MMIO via `/dev/mem`) that do not exist on a Mac. |
 
-The common thread: the runtime needs a **complete PC** underneath — a genuine
+The common thread: the runtime needs a **complete PC** underneath: a genuine
 x86_64 machine (TwinCAT runs on generic x86 by design), a Beckhoff CX, or a
 full-system x86 VM that fakes one (see the next section). Containers, privilege,
 `/sys` doctoring or device-tree spoofing do not substitute for it. As of 2026
@@ -215,13 +215,13 @@ there is no ARM-native TwinCAT runtime and no Apple-Silicon support.
 
 ### Develop offline, simulate on x86
 
-- **Develop offline — works.** Run XAE in the Parallels Windows VM (x64-emulated).
+- **Develop offline: works.** Run XAE in the Parallels Windows VM (x64-emulated).
   Editing POUs and **building/compiling** the PLC project needs no runtime, so it
   works with no network and no hardware (on a plane). You just cannot activate,
   go online, run or debug live.
-- **Simulate offline — no supported path.** Simulation, live debug and TcUnit all
+- **Simulate offline: no supported path.** Simulation, live debug and TcUnit all
   need a runtime, and every local runtime fails as above.
-- **Offline simulation — works, unsupported:** a full-system x86 VM in QEMU
+- **Offline simulation: works, unsupported.** a full-system x86 VM in QEMU
   (Beckhoff RT Linux installer + `tc31-xar-um`). Unlike Docker it presents a
   complete fake PC (UEFI, DMI, unrestricted `/dev/mem`), and it was measured to
   work on an M3 Max: the runtime starts, XAE in Parallels activates a PLC project
@@ -247,7 +247,7 @@ puts the XAR on a real x86_64 engine reachable over the network:
 
 The x86_64 host can be anything real: a NUC or spare PC, a cloud VM, or an x86
 CI runner. You drive it from the Mac with a remote Docker context, so the same
-`build.sh` / `run-xar.sh` work unchanged — they act on the active context.
+`build.sh` / `run-xar.sh` work unchanged; they act on the active context.
 
 1. **Provision the x86_64 host** with Docker and network reachability from the
    Mac (and from the Parallels VM's network).
@@ -284,7 +284,7 @@ CI runner. You drive it from the Mac with a remote Docker context, so the same
    Secure ADS, and use the `BHF_ADS_USER` / `BHF_ADS_PASSWORD` credentials.
    Then set it as the target system and activate your configuration.
 
-**If the Mac is genuinely all you have** — no x86 machine anywhere — you cannot
+**If the Mac is genuinely all you have**, no x86 machine anywhere, you cannot
 run the runtime, only talk to one. Build ADS *client* code (the standalone
 `adstool`, or the [Beckhoff/ADS](https://github.com/Beckhoff/ADS) library)
 natively on macOS and point it at a real TwinCAT target elsewhere.
@@ -304,18 +304,18 @@ store cannot load a multi-arch manifest list. The unsuffixed `:latest` and
 never silently emulates. A true manifest list is assembled only on `--push`,
 which uses a dedicated `docker-container` builder.
 
-On Apple Silicon, `linux/amd64` runs under emulation — fine for shell,
+On Apple Silicon, `linux/amd64` runs under emulation: fine for shell,
 inspection, and cross-compile prep, noticeably slow for real workloads.
 
 ## CI
 
 Two workflows:
 
-- **`lint.yml`** — always-on. ShellCheck on every `*.sh`, hadolint on the
+- **`lint.yml`**: always-on. ShellCheck on every `*.sh`, hadolint on the
   Dockerfile, and a gitignore audit that fails if blocked patterns
   (`*.img`, `*.zip`, `.env`, `docs/superpowers/`, etc.) are tracked.
 
-- **`build.yml`** — manual `workflow_dispatch`. Reads `BECKHOFF_EMAIL` and
+- **`build.yml`**: manual `workflow_dispatch`. Reads `BECKHOFF_EMAIL` and
   `BECKHOFF_PASSWORD` from repo secrets, builds and smoke-tests `linux/amd64`
   natively, and uploads the image as a workflow artifact. With input
   `push_to_ghcr=true`, it also sets up QEMU and pushes a multi-arch manifest to
@@ -332,7 +332,7 @@ docker login "$BHF_PUSH_REGISTRY"
 ```
 
 Verify the package is **private** afterwards. On GHCR a newly created package
-is private by default, but a repo-linked package can inherit visibility — check
+is private by default, but a repo-linked package can inherit visibility; check
 it rather than assuming. See [Licensing](#licensing) before pushing anywhere.
 
 ## Troubleshooting
@@ -344,12 +344,12 @@ it rather than assuming. See [Licensing](#licensing) before pushing anywhere.
 | `apt-get update` 401/403 | Wrong credentials | Recheck `.env` against your Beckhoff portal |
 | 404 on `Release` | Wrong suite | Suites are `trixie-*` / `bookworm-unstable`; see `docker/apt-config/bhf.list.template` |
 | `GPG fingerprint mismatch` during build | Key rotated, or MITM | Verify the new fingerprint with Beckhoff, then update `docker/apt-config/bhf-fingerprint.txt` |
-| `docker exporter does not currently support exporting manifest lists` | Multi-arch `--load` on the overlay2 image store | Expected — `build.sh` builds per-arch instead. To load one manifest, enable the containerd image store in Docker Desktop |
+| `docker exporter does not currently support exporting manifest lists` | Multi-arch `--load` on the overlay2 image store | Expected; `build.sh` builds per-arch instead. To load one manifest, enable the containerd image store in Docker Desktop |
 | Postinst failure during install | Package expects hardware or an RT kernel | `dpkg-divert` the offending postinst before the install `RUN`; see the plan's Task 11 escalation ladder |
-| XAE finds the target but cannot attach; `adstool <host> state` returns ADS error 6; `run-xar.sh` exits non-zero with "did not register an ADS server" | Runtime registered no ADS servers — unsupported/emulated host (see [Where the runtime actually starts](#where-the-runtime-actually-starts)) | Run the container on a real x86_64 engine or Beckhoff CX; from a Mac use a remote context — see [Running from a Mac](#running-from-a-mac-apple-silicon) |
+| XAE finds the target but cannot attach; `adstool <host> state` returns ADS error 6; `run-xar.sh` exits non-zero with "did not register an ADS server" | Runtime registered no ADS servers: unsupported/emulated host (see [Where the runtime actually starts](#where-the-runtime-actually-starts)) | Run the container on a real x86_64 engine or Beckhoff CX; from a Mac use a remote context, see [Running from a Mac](#running-from-a-mac-apple-silicon) |
 
 ## License
 
 Scripts, Dockerfile, and workflows in this repo: MIT.
-Beckhoff packages inside the built image: see [Licensing](#licensing) above —
+Beckhoff packages inside the built image: see [Licensing](#licensing) above,
 they are proprietary and are never redistributed by this repository.

@@ -13,7 +13,7 @@ test_renders_apt_auth_format() {
   assert_contains "$out" "password secret" "missing password line"
 }
 
-# Note: the target must NOT be an mktemp file — mktemp already creates 0600,
+# Note: the target must NOT be an mktemp file: mktemp already creates 0600,
 # which would make this pass regardless of what the renderer does. Fresh path
 # under umask 022 means a naive redirect yields 0644.
 test_out_file_is_mode_0600() {

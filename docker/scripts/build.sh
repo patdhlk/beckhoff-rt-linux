@@ -7,7 +7,7 @@
 # Local builds go one platform at a time with --load, because this host uses
 # the classic overlay2 image store, whose exporter cannot load a manifest list.
 # The multi-arch manifest is only assembled on --push, which needs a
-# docker-container builder — the default docker driver cannot build one.
+# docker-container builder: the default docker driver cannot build one.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -67,7 +67,7 @@ if printf '%s\n' "${PLATFORM_LIST[@]}" | grep -qx "linux/${HOST_ARCH}"; then
   docker tag "${TAG_BASE}:${IMAGE_VERSION}-${HOST_ARCH}" "${TAG_BASE}:${IMAGE_VERSION}"
   docker tag "${TAG_BASE}:${IMAGE_VERSION}-${HOST_ARCH}" "${TAG_BASE}:latest"
 else
-  echo "build: note — host arch ${HOST_ARCH} was not built, leaving :latest alone" >&2
+  echo "build: note: host arch ${HOST_ARCH} was not built, leaving :latest alone" >&2
 fi
 
 # 6. Optional smoke, per built platform.

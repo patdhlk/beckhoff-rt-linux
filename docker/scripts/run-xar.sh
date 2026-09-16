@@ -16,9 +16,9 @@
 #     mean the runtime did. On success it reports the address to route XAE to;
 #     on failure it prints a diagnosis and exits non-zero (container left up).
 #
-# Hardware reality check — the runtime binds to hardware it recognizes:
+# Hardware reality check: the runtime binds to hardware it recognizes:
 #   - amd64: real Intel/AMD silicon. Under emulation (Apple Silicon
-#     Rosetta/QEMU, or any x86-on-ARM layer) the ADS router never starts —
+#     Rosetta/QEMU, or any x86-on-ARM layer) the ADS router never starts;
 #     Beckhoff confirms ARM cannot emulate the x86 memory model it needs.
 #   - arm64: Beckhoff CX8290/CX9240 only. The binaries match the device-tree
 #     compatible strings cx8200/cx9240; generic ARM boards will not work.
@@ -87,7 +87,7 @@ if docker inspect "$CONTAINER" >/dev/null 2>&1; then
   if [ "$REPLACE" = "1" ]; then
     docker rm -f "$CONTAINER" >/dev/null
   else
-    echo "run-xar: container '${CONTAINER}' already exists — rerun with --replace" >&2
+    echo "run-xar: container '${CONTAINER}' already exists; rerun with --replace" >&2
     exit 1
   fi
 fi
@@ -116,7 +116,7 @@ docker exec "$CONTAINER" bash -c \
 
 sleep 2
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" != "true" ]; then
-  echo "run-xar: container exited — logs:" >&2
+  echo "run-xar: container exited; logs:" >&2
   docker logs "$CONTAINER" >&2 || true
   exit 1
 fi
@@ -143,18 +143,18 @@ echo "run-xar: container '${CONTAINER}' is up (image ${IMAGE}, engine arch ${ENG
 echo "run-xar: AmsNetId ${GOT_NETID}; ADS 48898/tcp, Secure ADS 8016/tcp, discovery 48899/udp."
 
 if [ "$REGISTERED" = "1" ]; then
-  echo "run-xar: ADS server registered (system-service state ${STATE}) — runtime is usable."
+  echo "run-xar: ADS server registered (system-service state ${STATE}) : runtime is usable."
   echo "run-xar: XAE route: Add Route -> ${HOST}, Secure ADS, user '${ADS_USER}'."
   exit 0
 fi
 
-echo "run-xar: ERROR — the runtime did not register an ADS server." >&2
+echo "run-xar: ERROR: the runtime did not register an ADS server." >&2
 echo "run-xar:   'adstool 127.0.0.1 state' failed (ADS error 6): discovery answers, XAE cannot attach." >&2
 echo "run-xar:   Common reasons:" >&2
 echo "run-xar:     - unsupported host: XAR needs real x86_64 (Intel/AMD) or Beckhoff CX arm64;" >&2
 echo "run-xar:       engine arch here is '${ENGINE_ARCH}'." >&2
 echo "run-xar:     - Apple Silicon: x86 cannot be emulated faithfully (Docker/Rosetta, QEMU," >&2
 echo "run-xar:       Windows-on-ARM), so the ADS router never starts. Run the container on an" >&2
-echo "run-xar:       x86_64 engine instead — see README 'Running from a Mac (Apple Silicon)'." >&2
+echo "run-xar:       x86_64 engine instead; see README 'Running from a Mac (Apple Silicon)'." >&2
 echo "run-xar: container left running for inspection (docker logs ${CONTAINER})." >&2
 exit 1

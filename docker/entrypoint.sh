@@ -5,7 +5,7 @@ set -euo pipefail
 #
 #   1. CAP_SYS_NICE, capability bit 23. Docker's default bounding set omits it
 #      (a stock `docker run` reports CapBnd 00000000a80425fb), so this is the
-#      common failure and it is NOT detectable by asking "is the bitset zero" —
+#      common failure and it is NOT detectable by asking "is the bitset zero";
 #      the bitset is never zero under stock docker.
 #   2. A PREEMPT_RT host kernel. Containers share the host's kernel, so no
 #      amount of privilege inside the container substitutes for it.
@@ -47,10 +47,10 @@ warn_no_rt() {
   fi
   echo "[beckhoff-rt-linux] note: real-time scheduling is not available here." >&2
   if [ "$missing_cap" = "1" ]; then
-    echo "[beckhoff-rt-linux] note:   missing CAP_SYS_NICE — rerun with --cap-add SYS_NICE (or --privileged)." >&2
+    echo "[beckhoff-rt-linux] note:   missing CAP_SYS_NICE; rerun with --cap-add SYS_NICE (or --privileged)." >&2
   fi
   if [ "$missing_kernel" = "1" ]; then
-    echo "[beckhoff-rt-linux] note:   host kernel is not PREEMPT_RT — containers share the host kernel." >&2
+    echo "[beckhoff-rt-linux] note:   host kernel is not PREEMPT_RT; containers share the host kernel." >&2
   fi
   echo "[beckhoff-rt-linux] note: silence this with BHF_QUIET=1." >&2
 }

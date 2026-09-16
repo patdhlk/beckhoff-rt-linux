@@ -75,7 +75,7 @@ check_rt_warning() {
 }
 run_check "RT warning fires under stock docker caps" check_rt_warning
 
-# 8. OCI license label set — the distribution restriction must travel with it.
+# 8. OCI license label set: the distribution restriction must travel with it.
 check_license_label() {
   [ "$(docker inspect "$TAG" --format '{{ index .Config.Labels "org.opencontainers.image.licenses" }}')" \
     = 'proprietary-Beckhoff' ]

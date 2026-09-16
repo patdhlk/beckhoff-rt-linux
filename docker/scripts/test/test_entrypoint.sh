@@ -6,8 +6,8 @@ source "$HERE/_helpers.sh"
 ENTRY="$HERE/../../entrypoint.sh"
 
 # Real-time needs two things, and the entrypoint warns about each separately:
-#   1. CAP_SYS_NICE (capability bit 23) — Docker's default bounding set omits it
-#   2. a PREEMPT_RT host kernel — containers share the host's
+#   1. CAP_SYS_NICE (capability bit 23): Docker's default bounding set omits it
+#   2. a PREEMPT_RT host kernel: containers share the host's
 #
 # CAPS_FULL has bit 23 set; CAPS_DOCKER_DEFAULT is what a stock `docker run`
 # actually reports, and notably is non-zero, which is why "is the bitset zero"
