@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<TcConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2009/05/TcConfig">
+	<RemoteConnections>
+		<Route>
+			<Name>local-adstool</Name>
+			<Address>127.0.0.1</Address>
+			<NetId>10.0.2.15.1.1</NetId>
+			<Type>TCP_IP</Type>
+		</Route>
+		<Route>
+			<Name>xae-parallels</Name>
+			<Address>10.0.2.2</Address>
+			<NetId>10.211.55.3.1.1</NetId>
+			<Type>TCP_IP</Type>
+		</Route>
+	</RemoteConnections>
+</TcConfig>

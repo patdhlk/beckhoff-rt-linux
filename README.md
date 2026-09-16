@@ -63,6 +63,8 @@ This is operational guidance, not legal advice. If in doubt, ask Beckhoff.
 - A Beckhoff customer account with access to `deb.beckhoff.com`
 - Linux x86_64 host, or Apple Silicon (both `linux/amd64` and `linux/arm64` are
   buildable — see [Architectures](#architectures))
+- **Running the XAR runtime needs a real x86_64 engine.** Apple Silicon cannot
+  run it under emulation — see [Running from a Mac (Apple Silicon)](#running-from-a-mac-apple-silicon).
 
 ## Quick start
 
@@ -123,9 +125,169 @@ docker run --rm beckhoff-rt-linux:latest adstool --help
 # Inspect the rootfs
 docker run --rm -it beckhoff-rt-linux:latest
 
-# Bring up systemd-managed services (advanced; still not real-time)
-docker run --rm --privileged beckhoff-rt-linux:latest --systemd
+# Run the TwinCAT runtime so an XAE can connect — see the next section
+./docker/scripts/run-xar.sh
 ```
+
+Note the entrypoint's `--systemd` flag is inert: the slim image does not
+contain systemd, so the unit files shipped by the Beckhoff packages are never
+used. `run-xar.sh` starts the service chain directly instead.
+
+## Running the TwinCAT runtime (XAR)
+
+```bash
+./docker/scripts/run-xar.sh            # start detached container 'beckhoff-xar'
+./docker/scripts/run-xar.sh --replace  # recreate it
+./docker/scripts/run-xar.sh --down     # remove the container (volume kept)
+```
+
+The script runs `TcSysConf` followed by `TcSystemServiceUm -f 0x5 -i <NetId>`
+as the container's foreground process, publishes ADS (`48898/tcp`), Secure ADS
+(`8016/tcp`) and discovery (`48899/udp`), and persists `/etc/TwinCAT` in a
+named volume so the AmsNetId and routes survive restarts. It also creates a
+Linux user inside the container, because the runtime validates XAE route-add
+credentials against Linux system users (via `tcauth`).
+
+Configuration, all optional:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BHF_IMAGE` | `beckhoff-rt-linux:latest` | Image to run |
+| `BHF_CONTAINER` | `beckhoff-xar` | Container name |
+| `BHF_VOLUME` | `beckhoff-xar-data` | Volume for `/etc/TwinCAT` |
+| `BHF_NETID` | `192.168.77.10.1.1` | AmsNetId — without an explicit one the service derives `0.0.0.0.1.1` off Beckhoff hardware |
+| `BHF_ADS_USER` / `BHF_ADS_PASSWORD` | `Administrator` / `1` | Route-add credentials. Beckhoff's conventional defaults — change them for anything reachable by others |
+| `BHF_PRIVILEGED` | `0` | `1` runs `--privileged` instead of `--cap-add SYS_NICE --ulimit memlock=-1` |
+| `BHF_ENGINE_HOST` | derived | Hostname/IP printed in the XAE route hint. Auto-derived from the active Docker context / `DOCKER_HOST`; set it when the routable address differs (tunnels, NAT) |
+
+From the XAE: **Add Route** → enter this host's IP (broadcast search will not
+cross the Docker NAT), Secure ADS, and the credentials above.
+
+`run-xar.sh` verifies the runtime actually registered an ADS server before it
+reports success: it probes the local system service (`adstool 127.0.0.1
+state`). If no server registers — the normal outcome on an unsupported or
+emulated host — it prints a diagnosis and exits non-zero, leaving the container
+up for inspection. See [Where the runtime actually starts](#where-the-runtime-actually-starts).
+
+### Where the runtime actually starts
+
+The XAR binds to hardware it recognizes; the container transport coming up
+does not mean the runtime did:
+
+- **amd64** — real Intel/AMD silicon. It needs a real PC underneath (SMBIOS/DMI,
+  unrestricted `/dev/mem`, a CPUID it recognises). Under emulation it fails for
+  one of two reasons: a TSO-less x86 layer (QEMU-user, the Windows-on-ARM x64
+  emulator) breaks the memory ordering the ADS router relies on; Apple's Rosetta
+  gets the memory ordering right, but the container has no real PC beneath it and
+  the system service aborts in its hardware layer. Either way no ADS server
+  registers. See [Running from a Mac](#running-from-a-mac-apple-silicon) for the
+  measured detail.
+- **arm64** — Beckhoff CX8290/CX9240 only. The binaries match the device-tree
+  `compatible` strings `cx8200`/`cx9240`; generic ARM boards (Raspberry Pi,
+  Revolution Pi) will not work, RT kernel or not.
+
+On unsupported hosts the container still answers UDP discovery (`adstool
+<host> netid` returns the NetId), but the system service and every AMS port
+reply with ADS error 6 (target port not found) and the XAE cannot attach.
+`run-xar.sh` detects exactly this (its post-start `adstool 127.0.0.1 state`
+probe) and fails with a diagnosis instead of reporting a dead container as up.
+
+If your development machine is an Apple Silicon Mac, see the next section for
+the working topology.
+
+## Running from a Mac (Apple Silicon)
+
+You cannot run the XAR runtime in **Docker** on an Apple Silicon Mac, on either
+image architecture — and, contrary to the usual explanation, the "x86 memory
+model" is not what stops it. Each path was tested on an M-series Mac:
+
+| Path | What happens | Root cause (verified) |
+|------|--------------|-----------------------|
+| Docker **amd64**, Rosetta | `TcSysConf` completes (once `/sys/kernel/iommu_groups` exists), but the system service aborts in its HAL — `Unknown Intel CPU model`, `Mapping memory failed … /dev/mem … Operation not permitted`; `state` → ADS error 6. | Rosetta emulates x86 memory ordering (TSO) correctly, so the router is not the blocker. Docker's LinuxKit VM is not a real PC: no SMBIOS/DMI, `/dev/mem` restricted (`STRICT_DEVMEM`), a CPUID TwinCAT does not recognise. |
+| Docker **amd64**, QEMU-user, or **Windows-on-ARM** x64 emulator | ADS router never starts. | No hardware TSO, so x86 memory ordering is not preserved. This is the case Beckhoff support describes. |
+| Docker **arm64**, native (no emulation) | `TcSystemService` runs, discovery answers, `state` → ADS error 6. Spoofing the identity gate (`/sys/firmware/devicetree/base/compatible` = `beckhoff,cx9240`) clears the check — then it **segfaults**. | The arm64 build is gated to Beckhoff CX (`beckhoff,cx8200`/`cx9240`), then drives their real peripherals (CCAT PCIe FPGA, board EEPROMs, fixed MMIO via `/dev/mem`) that do not exist on a Mac. |
+
+The common thread: the runtime needs a **complete PC** underneath — a genuine
+x86_64 machine (TwinCAT runs on generic x86 by design), a Beckhoff CX, or a
+full-system x86 VM that fakes one (see the next section). Containers, privilege,
+`/sys` doctoring or device-tree spoofing do not substitute for it. As of 2026
+there is no ARM-native TwinCAT runtime and no Apple-Silicon support.
+
+### Develop offline, simulate on x86
+
+- **Develop offline — works.** Run XAE in the Parallels Windows VM (x64-emulated).
+  Editing POUs and **building/compiling** the PLC project needs no runtime, so it
+  works with no network and no hardware (on a plane). You just cannot activate,
+  go online, run or debug live.
+- **Simulate offline — no supported path.** Simulation, live debug and TcUnit all
+  need a runtime, and every local runtime fails as above.
+- **Offline simulation — works, unsupported:** a full-system x86 VM in QEMU
+  (Beckhoff RT Linux installer + `tc31-xar-um`). Unlike Docker it presents a
+  complete fake PC (UEFI, DMI, unrestricted `/dev/mem`), and it was measured to
+  work on an M3 Max: the runtime starts, XAE in Parallels activates a PLC project
+  on it and it enters RUN (stopped only by the missing TC3 PLC trial licence).
+  Caveats: TCG emulation is slow (no HVF for x86 on ARM; cyclictest max 5 ms at a
+  1 ms interval), so use 10 ms tasks, and Beckhoff does not support it. Recipe and
+  measurements: [docs/research/apple-silicon-xar-feasibility.md](docs/research/apple-silicon-xar-feasibility.md)
+  and the scripts in `docs/research/apple-silicon-qemu/`.
+
+### Simulating against a real x86_64 engine
+
+XAE, however, is only an ADS client. The working setup keeps XAE on the Mac and
+puts the XAR on a real x86_64 engine reachable over the network:
+
+```
+  Mac (Apple Silicon)                      x86_64 Linux host
+  +-------------------------+             +--------------------------+
+  | Parallels VM            |   ADS/TCP   | Docker engine            |
+  |  Windows + TwinCAT XAE  |--48898/8016>|  beckhoff-xar container  |
+  |  (ADS client)           |   48899/udp |  (TcSystemServiceUm)     |
+  +-------------------------+             +--------------------------+
+```
+
+The x86_64 host can be anything real: a NUC or spare PC, a cloud VM, or an x86
+CI runner. You drive it from the Mac with a remote Docker context, so the same
+`build.sh` / `run-xar.sh` work unchanged — they act on the active context.
+
+1. **Provision the x86_64 host** with Docker and network reachability from the
+   Mac (and from the Parallels VM's network).
+
+2. **Point the Mac's Docker CLI at it.** Over SSH is simplest:
+
+   ```bash
+   docker context create x86 --docker host=ssh://user@x86-host
+   docker context use x86
+   docker version --format '{{.Server.Arch}}'   # must print: amd64
+   ```
+
+3. **Build (or load) the image on that engine.** `build.sh` honours the active
+   context and tags `:latest` for the engine's native arch:
+
+   ```bash
+   ./docker/scripts/build.sh --smoke
+   ```
+
+   Or build once elsewhere and transfer it: `docker save beckhoff-rt-linux:latest | docker -c x86 load`.
+
+4. **Start the runtime on the x86 engine:**
+
+   ```bash
+   ./docker/scripts/run-xar.sh
+   ```
+
+   Because the engine is real x86, the ADS router starts and the post-start
+   health check passes. The script prints the address to route XAE to; if the
+   derived host is wrong for your network, set `BHF_ENGINE_HOST=<routable-ip>`.
+
+5. **Attach XAE (in Parallels):** SYSTEM → Routes → **Add Route** → enter the
+   x86 host's IP (broadcast discovery will not cross the VM/Docker NAT), tick
+   Secure ADS, and use the `BHF_ADS_USER` / `BHF_ADS_PASSWORD` credentials.
+   Then set it as the target system and activate your configuration.
+
+**If the Mac is genuinely all you have** — no x86 machine anywhere — you cannot
+run the runtime, only talk to one. Build ADS *client* code (the standalone
+`adstool`, or the [Beckhoff/ADS](https://github.com/Beckhoff/ADS) library)
+natively on macOS and point it at a real TwinCAT target elsewhere.
 
 ## Architectures
 
@@ -184,6 +346,7 @@ it rather than assuming. See [Licensing](#licensing) before pushing anywhere.
 | `GPG fingerprint mismatch` during build | Key rotated, or MITM | Verify the new fingerprint with Beckhoff, then update `docker/apt-config/bhf-fingerprint.txt` |
 | `docker exporter does not currently support exporting manifest lists` | Multi-arch `--load` on the overlay2 image store | Expected — `build.sh` builds per-arch instead. To load one manifest, enable the containerd image store in Docker Desktop |
 | Postinst failure during install | Package expects hardware or an RT kernel | `dpkg-divert` the offending postinst before the install `RUN`; see the plan's Task 11 escalation ladder |
+| XAE finds the target but cannot attach; `adstool <host> state` returns ADS error 6; `run-xar.sh` exits non-zero with "did not register an ADS server" | Runtime registered no ADS servers — unsupported/emulated host (see [Where the runtime actually starts](#where-the-runtime-actually-starts)) | Run the container on a real x86_64 engine or Beckhoff CX; from a Mac use a remote context — see [Running from a Mac](#running-from-a-mac-apple-silicon) |
 
 ## License
 
