@@ -63,8 +63,9 @@ This is operational guidance, not legal advice. If in doubt, ask Beckhoff.
 - A Beckhoff customer account with access to `deb.beckhoff.com`
 - Linux x86_64 host, or Apple Silicon (both `linux/amd64` and `linux/arm64` are
   buildable, see [Architectures](#architectures))
-- **Running the XAR runtime needs a real x86_64 engine.** Apple Silicon cannot
-  run it under emulation, see [Running from a Mac (Apple Silicon)](#running-from-a-mac-apple-silicon).
+- **Running the XAR runtime in Docker needs a real x86_64 engine.** Docker on
+  Apple Silicon cannot run it. A full-system x86 QEMU VM on the Mac can, for
+  offline simulation only, see [Running from a Mac (Apple Silicon)](#running-from-a-mac-apple-silicon).
 
 ## Quick start
 
@@ -180,8 +181,9 @@ does not mean the runtime did:
   emulator) breaks the memory ordering the ADS router relies on; Apple's Rosetta
   gets the memory ordering right, but the container has no real PC beneath it and
   the system service aborts in its hardware layer. Either way no ADS server
-  registers. See [Running from a Mac](#running-from-a-mac-apple-silicon) for the
-  measured detail.
+  registers. A full-system x86 VM that presents a complete PC (QEMU with UEFI and
+  SMBIOS) does start it, measured on an M3 Max. See
+  [Running from a Mac](#running-from-a-mac-apple-silicon) for the detail.
 - **arm64**: Beckhoff CX8290/CX9240 only. The binaries match the device-tree
   `compatible` strings `cx8200`/`cx9240`; generic ARM boards (Raspberry Pi,
   Revolution Pi) will not work, RT kernel or not.
@@ -197,9 +199,18 @@ the working topology.
 
 ## Running from a Mac (Apple Silicon)
 
+Short version, all measured on an M3 Max:
+
+| Goal | On the Mac alone | Status |
+|------|------------------|--------|
+| Edit and compile PLC projects | XAE in a Parallels Windows VM | Works |
+| Run the XAR in Docker (either image arch) | No | Fails, see table below |
+| Run the XAR for offline simulation and TcUnit | Beckhoff RT Linux + `tc31-xar-um` in a full-system x86 **QEMU** VM | Works (2026-09-16), unsupported, 10 ms tasks |
+| Real-time, EtherCAT, 1 ms tasks | No | Needs a real x86_64 machine or a Beckhoff CX |
+
 You cannot run the XAR runtime in **Docker** on an Apple Silicon Mac, on either
 image architecture, and, contrary to the usual explanation, the "x86 memory
-model" is not what stops it. Each path was tested on an M-series Mac:
+model" is not what stops it. Each Docker path was tested:
 
 | Path | What happens | Root cause (verified) |
 |------|--------------|-----------------------|
@@ -213,28 +224,73 @@ full-system x86 VM that fakes one (see the next section). Containers, privilege,
 `/sys` doctoring or device-tree spoofing do not substitute for it. As of 2026
 there is no ARM-native TwinCAT runtime and no Apple-Silicon support.
 
-### Develop offline, simulate on x86
+### Develop offline: XAE without a runtime
 
-- **Develop offline: works.** Run XAE in the Parallels Windows VM (x64-emulated).
-  Editing POUs and **building/compiling** the PLC project needs no runtime, so it
-  works with no network and no hardware (on a plane). You just cannot activate,
-  go online, run or debug live.
-- **Simulate offline: no supported path.** Simulation, live debug and TcUnit all
-  need a runtime, and every local runtime fails as above.
-- **Offline simulation: works, unsupported.** a full-system x86 VM in QEMU
-  (Beckhoff RT Linux installer + `tc31-xar-um`). Unlike Docker it presents a
-  complete fake PC (UEFI, DMI, unrestricted `/dev/mem`), and it was measured to
-  work on an M3 Max: the runtime starts, XAE in Parallels activates a PLC project
-  on it and it enters RUN (stopped only by the missing TC3 PLC trial licence).
-  Caveats: TCG emulation is slow (no HVF for x86 on ARM; cyclictest max 5 ms at a
-  1 ms interval), so use 10 ms tasks, and Beckhoff does not support it. Recipe and
-  measurements: [docs/research/apple-silicon-xar-feasibility.md](docs/research/apple-silicon-xar-feasibility.md)
-  and the scripts in `docs/research/apple-silicon-qemu/`.
+Run XAE in the Parallels Windows VM (x64 under Windows' emulation). Editing
+POUs and **building** the PLC project needs no runtime, so it works with no
+network and no hardware. Activating, going online, running and debugging need a
+runtime: either the QEMU VM below or a real x86_64 engine.
 
-### Simulating against a real x86_64 engine
+### Simulate offline: the XAR in a QEMU x86 VM on the Mac
 
-XAE, however, is only an ADS client. The working setup keeps XAE on the Mac and
-puts the XAR on a real x86_64 engine reachable over the network:
+Measured on 2026-09-16 on a MacBook Pro M3 Max (macOS 26.6, QEMU 11.1.1 from
+Homebrew, Parallels 26.4.1 with a Windows 11 ARM VM running TwinCAT 4026 XAE):
+Beckhoff RT Linux (installer build 306707, kernel `6.19.10-rt1-bhf2 PREEMPT_RT`)
+installs in a full-system `qemu-system-x86_64` VM, `tc31-xar-um 4026.28.0-1`
+starts and logs `TwinCAT system start completed. AdsState: >15<`, XAE in
+Parallels adds the route, activates a PLC project and the runtime enters RUN
+(AdsState 5). The only thing that stopped it was the missing TC3 PLC trial
+licence on the fresh install, which XAE requests interactively.
+
+Why this works where Docker does not: the VM presents a complete PC. UEFI
+(OVMF), SMBIOS/DMI (`-smbios` set to a Beckhoff C6015), a Skylake CPUID, an
+IOMMU and unrestricted `/dev/mem` inside the guest. QEMU runs the x86 guest in
+software (TCG); there is no hardware acceleration for x86 on Apple Silicon.
+
+Rebuild it with the scripts in
+[`docs/research/apple-silicon-qemu/`](docs/research/apple-silicon-qemu/README.md)
+(about an hour end to end):
+
+1. `brew install qemu` and download the Beckhoff RT Linux installer image from
+   myBeckhoff (not in git).
+2. `install-vm.sh <installer.img>`: boots the installer with a blank 16 GB
+   `target.qcow2`, drive the TUI over VNC `:5` or with `vm.py`. About 10 minutes.
+3. `start-vm.sh`: boots the installed guest and forwards SSH (2222), ADS
+   (48898, 8016) and discovery (48899/udp) to the Mac. Inside the guest, add your
+   `deb.beckhoff.com` credentials to `/etc/apt/auth.conf.d/bhf.conf` and
+   `apt install tc31-xar-um tcsysconf adstool`.
+4. Routes: install the `StaticRoutes.xml` template on the guest (XAE's NetId at
+   `10.0.2.2`, the QEMU gateway) and the `10-ads.conf` nftables drop-in. On
+   Windows, add a route to the Mac's Parallels bridge IP (usually `10.211.55.2`)
+   with the guest NetId `0.18.52.86.1.1`, or run `windows/add-route.ps1`.
+5. In XAE pick the route, request the 7-day trial licence, activate, RUN.
+
+Limits and gotchas, all measured:
+
+- **Timing is emulation-bound.** `cyclictest` at a 1 ms interval inside the
+  guest: min 46 µs, avg 900 µs, max 5.2 ms. A 1 ms PLC task overruns
+  continuously; **use 10 ms tasks** for logic simulation and TcUnit. No
+  real-time, no EtherCAT (the user-mode runtime has none anyway).
+- **Beckhoff RT Linux firewalls plain ADS.** Its nftables opens only Secure ADS
+  (8016), SSH, HTTPS and discovery (48899/udp) by default. Either add the
+  `10-ads.conf` drop-in for 48898 or use a Secure ADS route.
+- **No broadcast discovery.** QEMU user-mode networking has no inbound path, so
+  XAE must be given the Mac's address explicitly; traffic from Windows reaches
+  the guest via the Mac, which is why the guest route points at `10.0.2.2`.
+- **`adstool` is not a liveness probe here.** It returns ADS error 6 against this
+  runtime even when XAE is happily online. Check the journal for "start
+  completed" or use the Windows router (`windows/ads-state.ps1`).
+- **Unsupported by Beckhoff.** Offline simulation and testing only; the
+  licensing notice above applies unchanged.
+
+Full forensics, the route-by-route verdict and the raw measurements are in
+[docs/research/apple-silicon-xar-feasibility.md](docs/research/apple-silicon-xar-feasibility.md#measured-result-2026-09-16-route-2-on-an-m3-max).
+
+### Simulate against a real x86_64 engine
+
+For anything beyond simulation (real cycle times, EtherCAT, a supported
+setup) keep XAE on the Mac and put the XAR on a real x86_64 engine reachable
+over the network. XAE is only an ADS client:
 
 ```
   Mac (Apple Silicon)                      x86_64 Linux host
@@ -284,10 +340,11 @@ CI runner. You drive it from the Mac with a remote Docker context, so the same
    Secure ADS, and use the `BHF_ADS_USER` / `BHF_ADS_PASSWORD` credentials.
    Then set it as the target system and activate your configuration.
 
-**If the Mac is genuinely all you have**, no x86 machine anywhere, you cannot
-run the runtime, only talk to one. Build ADS *client* code (the standalone
-`adstool`, or the [Beckhoff/ADS](https://github.com/Beckhoff/ADS) library)
-natively on macOS and point it at a real TwinCAT target elsewhere.
+**If the Mac is genuinely all you have**, no x86 machine anywhere, the QEMU VM
+above is the only way to run the runtime locally, and only for simulation. ADS
+*client* code (the standalone `adstool`, or the
+[Beckhoff/ADS](https://github.com/Beckhoff/ADS) library) builds natively on
+macOS and can target either that VM or a real TwinCAT system elsewhere.
 
 ## Architectures
 
@@ -346,7 +403,7 @@ it rather than assuming. See [Licensing](#licensing) before pushing anywhere.
 | `GPG fingerprint mismatch` during build | Key rotated, or MITM | Verify the new fingerprint with Beckhoff, then update `docker/apt-config/bhf-fingerprint.txt` |
 | `docker exporter does not currently support exporting manifest lists` | Multi-arch `--load` on the overlay2 image store | Expected; `build.sh` builds per-arch instead. To load one manifest, enable the containerd image store in Docker Desktop |
 | Postinst failure during install | Package expects hardware or an RT kernel | `dpkg-divert` the offending postinst before the install `RUN`; see the plan's Task 11 escalation ladder |
-| XAE finds the target but cannot attach; `adstool <host> state` returns ADS error 6; `run-xar.sh` exits non-zero with "did not register an ADS server" | Runtime registered no ADS servers: unsupported/emulated host (see [Where the runtime actually starts](#where-the-runtime-actually-starts)) | Run the container on a real x86_64 engine or Beckhoff CX; from a Mac use a remote context, see [Running from a Mac](#running-from-a-mac-apple-silicon) |
+| XAE finds the target but cannot attach; `adstool <host> state` returns ADS error 6; `run-xar.sh` exits non-zero with "did not register an ADS server" | Runtime registered no ADS servers: unsupported/emulated host (see [Where the runtime actually starts](#where-the-runtime-actually-starts)) | Run the container on a real x86_64 engine or Beckhoff CX; from a Mac use a remote context, or the QEMU x86 VM for offline simulation, see [Running from a Mac](#running-from-a-mac-apple-silicon) |
 
 ## License
 
